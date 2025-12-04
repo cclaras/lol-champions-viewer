@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!--responsividade -->
+    <title>LoL Champions Test</title>
+
+    <link rel="stylesheet" href="bootstrap-5.3.8-dist/css/bootstrap.min.css">
+    <script src="vue.js"></script>
+    <script src="axios.min.js"></script>
+</head>
+<body>
+    <div id="app" class="container">
+        <div class="row">
+            <!-- o que precisa e busca as informações na api -->
+            <div class="col-md-6">
+                <h1>Buscar Campeão</h1>
+                <input type="text" class="form-control mb-3" placeholder="Nome do Campeão" v-model="nomeChampion">
+                
+                <div class="button-group mb-3">
+                    <button class="btn btn-primary" @click="salvar()" :disabled="!nomeChampion">Salvar</button>
+                    <button class="btn btn-info" @click="buscarChampionApi">Buscar</button>
+                </div>
+
+                <div v-if="erro" class="alert alert-danger">Campeão não encontrado!</div>
+
+                <div v-if="championApi" class="mt-4">
+                    <h3 class="text-capitalize">{{ championApi.name }}</h3>
+                    <img :src="championApi.image" width="120" :alt="championApi.name">
+                    <p><strong>Classe:</strong> {{ championApi.role }}</p>
+                    <p><strong>Dificuldade:</strong> {{ championApi.difficulty }}</p> 
+                </div>
+            </div>
+
+            <!-- lista de campeões salvos -->
+            <div class="col-md-6">
+                <h1>Lista de Campeões</h1>
+                
+                <div class="mb-3">
+                    <small class="text-muted">Total de campeões: {{ listaChampions.length }}</small>
+                </div>
+
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Classe</th>
+                            <th>Dificuldade</th>
+                            <th>Foto</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(champ, index) in listaChampions" :key="index">
+                            <td class="text-capitalize">{{ champ.nome }}</td>
+                            <td>{{ champ.role }}</td>
+                            <td>{{ champ.dificuldade }}</td>
+                            <td>
+                                <img :src="champ.foto" width="50" height="50" class="champion-img" :alt="champ.nome">
+                            </td>
+                            <td>
+                                <button class="btn btn-warning btn-sm me-1" @click="mostrar(index)">Mostrar</button>
+                                <button class="btn btn-danger btn-sm" @click="excluir(index)">Excluir</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+<script>
+const API_URL = 'https://ddragon.leagueoflegends.com/cdn/13.24.1/data/en_US/champion.json';
+
+new Vue({ 
+    el: '#app',
+    data: {
+        nomeChampion: '',
+        listaChampions: [],
+        championApi: null,
+        erro: false,
+        carregando: false,
+        editandoIndex: null
+    },
+    methods: { 
+        generatePlaceholder(name) { 
+            const colors = ['#c41e3a', '#0070dd', '#1eff00', '#ff8000', '#a335ee', '#ffff98'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50"><rect width="50" height="50" fill="${color}" rx="8"/><text x="25" y="30" text-anchor="middle" fill="white" font-family="Arial" font-size="12">${name.substring(0, 3)}</text></svg>`;
+        },
+
+        salvar() { 
+            const champion = {
+                id: this.editandoIndex !== null ? this.listaChampions[this.editandoIndex].id : this.listaChampions.length + 1,
+                nome: this.nomeChampion,
+                role: this.championApi?.role || "Não definida",
+                dificuldade: this.championApi?.difficulty || "0",
+                foto: this.championApi?.image || this.generatePlaceholder(this.nomeChampion)
+            };
+
+            if (this.editandoIndex !== null) {
+                this.listaChampions.splice(this.editandoIndex, 1, champion);
+            } else {
+                this.listaChampions.push(champion);
+            }
+
+            this.limparFormulario();
+            this.armazenar();
+        },
+
+        mostrar(index) { 
+            const c = this.listaChampions[index];
+            this.nomeChampion = c.nome;
+            this.championApi = {
+                name: c.nome,
+                role: c.role,
+                difficulty: c.dificuldade,
+                image: c.foto
+            };
+            this.editandoIndex = index;
+        },
+
+        excluir(index) {
+            if (confirm(`Excluir ${this.listaChampions[index].nome}?`)) {
+                this.listaChampions.splice(index, 1);
+                this.armazenar();
+                if (this.editandoIndex === index) this.limparFormulario();
+            }
+        },
+
+        limparFormulario() {
+            this.nomeChampion = '';
+            this.championApi = null;
+            this.erro = false;
+            this.editandoIndex = null;
+        },
+
+        buscarChampionApi() {
+            if (!this.nomeChampion) return;
+
+            axios.get(API_URL)
+                .then(res => {
+                    const champions = res.data.data;
+                    const championKey = Object.keys(champions).find(key => 
+                        key.toLowerCase() === this.nomeChampion.toLowerCase().replace(/\s+/g, '') || 
+                        champions[key].name.toLowerCase() === this.nomeChampion.toLowerCase()
+                    );
+
+                    if (championKey) {
+                        const champ = champions[championKey];
+                        this.championApi = {
+                            name: champ.name,
+                            role: champ.tags.join(', '),
+                            difficulty: champ.info.difficulty + '/10',
+                            image: `https://ddragon.leagueoflegends.com/cdn/13.24.1/img/champion/${champ.image.full}`
+                        };
+                        this.erro = false;
+                    } else {
+                        this.erro = true;
+                        this.championApi = null;
+                    }
+                })
+                .catch(() => {
+                    this.erro = true;
+                    this.championApi = null;
+                });
+        },
+
+        carregarApi() {
+            this.carregando = true;
+            axios.get(API_URL)
+                .then(res => {
+                    const champions = Object.values(res.data.data).slice(0, 5); // Apenas 5 campeões iniciais
+                    
+                    this.listaChampions = champions.map((champ, index) => ({
+                        id: index + 1,
+                        nome: champ.name,
+                        role: champ.tags.join(', '),
+                        dificuldade: champ.info.difficulty + '/10',
+                        foto: `https://ddragon.leagueoflegends.com/cdn/13.24.1/img/champion/${champ.image.full}`
+                    }));
+                    
+                    this.armazenar();
+                })
+                .catch(this.carregarFallback)
+                .finally(() => this.carregando = false);
+        },
+
+        carregarFallback() { 
+            const fallbackChampions = [
+                { name: "Ashe", role: "Marksman", difficulty: "4" },
+                { name: "Garen", role: "Fighter, Tank", difficulty: "3" },
+                { name: "Lux", role: "Mage, Support", difficulty: "5" },
+                { name: "Zed", role: "Assassin", difficulty: "7" },
+                { name: "Ahri", role: "Mage, Assassin", difficulty: "5" }
+            ];
+
+            this.listaChampions = fallbackChampions.map((champ, index) => ({
+                id: index + 1,
+                nome: champ.name,
+                role: champ.role,
+                dificuldade: champ.difficulty + '/10',
+                foto: this.generatePlaceholder(champ.name)
+            }));
+        },
+
+        armazenar() {
+            localStorage.setItem('champions', JSON.stringify(this.listaChampions));
+        },
+
+        carregar() {
+            const champions = localStorage.getItem('champions');
+            if (champions) this.listaChampions = JSON.parse(champions);
+        }
+    },
+    created() {
+        this.carregar();
+        if (this.listaChampions.length === 0) this.carregarApi();
+    }
+});
+</script>
+
+<style>
+.champion-img {
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px;
+    object-fit: contain;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+h1 {
+    color: #c8aa6e; 
+    border-bottom: 2px solid #c8aa6e;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #c8aa6e, #785a28);
+    border: none;
+}
+
+.btn-info {
+    background: linear-gradient(135deg, #0ac8b9, #005a82);
+    border: none;
+}
+</style>
+</body>
+</html>
